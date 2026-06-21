@@ -20,12 +20,27 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   }
 });
+
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
 
  const db = client.db("online-ticket-booking-platform");
+ const vendorCollection = db.collection("vendor");
+
+ //vendor api 
+
+ app.post('/vendor/add-ticket',async (req,res)=>{
+  const ticketData = req.body;
+  try {
+    const result = await vendorCollection.insertOne(ticketData);
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(500).json(error);
+  }
+})
+
    
 
 
