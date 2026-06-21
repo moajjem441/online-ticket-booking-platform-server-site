@@ -25,13 +25,15 @@ async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
-    
+
 
  const db = client.db("online-ticket-booking-platform");
  const vendorCollection = db.collection("vendor");
 
  //vendor api 
 
+
+ //post api
  app.post('/vendor/add-ticket',async (req,res)=>{
   const ticketData = req.body;
   try {
@@ -43,6 +45,17 @@ async function run() {
 })
 
    
+
+//get api
+
+app.get('/vendor/my-added-tickets',async (req,res)=>{
+ try{
+  const result = await vendorCollection.find({});
+  res.status (200).json(result);
+ }catch(error){
+  res.status(500).json(error);
+ }
+})
 
 
 
