@@ -70,6 +70,7 @@ app.get('/vendor/my-added-tickets/:id',async(req,res)=>{
 })
 
 
+
 //patch api for vendor ticket update
 
 app.patch('/vendor/my-added-tickets/:id',async(req,res)=>{
