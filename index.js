@@ -85,9 +85,9 @@ app.patch('/vendor/my-added-tickets/:id',async(req,res)=>{
 })
 
 
-//admin api
 
 
+//admin get api
 app.get('/admin/all-tickets', async (req, res) => {
   try {
     const result = await vendorCollection.find().toArray(); // কালেকশনের সব ডেটা অ্যারে আকারে আসবে
@@ -96,6 +96,9 @@ app.get('/admin/all-tickets', async (req, res) => {
     res.status(500).json({ message: "Failed to fetch tickets", error: error.message });
   }
 });
+
+
+
 
 
 //delete api
