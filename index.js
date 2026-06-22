@@ -4,7 +4,7 @@ const app = express();
 const cors =require('cors');
 const port = process.env.PORT;
 
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion,ObjectId } = require('mongodb');
 const uri =process.env.MONGO_URL
 
 
@@ -47,7 +47,6 @@ async function run() {
    
 
 //get api
-
 app.get('/vendor/my-added-tickets',async (req,res)=>{
  try{
   const result = await vendorCollection.find({}).toArray();
@@ -58,11 +57,26 @@ app.get('/vendor/my-added-tickets',async (req,res)=>{
 })
 
 
+
 //get api 
-app.get('/vendor/ticket-details/:id',async(req,res)=>{
+app.get('/vendor/my-added-tickets/:id',async(req,res)=>{
   const id =req.params.id;
   try{
-    const result =await vendorCollection.findOne({_id: ObjectId(id)});
+    const result =await vendorCollection.findOne({_id: new ObjectId(id)});
+    res.status(200).json(result);
+  }catch(error){
+    res.status(500).json(error);
+  }
+})
+
+
+//patch api for vendor ticket update
+
+app.patch('/vendor/my-added-tickets/:id',async(req,res)=>{
+  const id = req.params.id;
+  const ticketData = req.body;
+  try{
+    const result = await vendorCollection.updateOne({_id: new ObjectId(id)},{$set: ticketData});
     res.status(200).json(result);
   }catch(error){
     res.status(500).json(error);
@@ -74,7 +88,7 @@ app.get('/vendor/ticket-details/:id',async(req,res)=>{
 app.delete('/vendor/delete-ticket/:id',async(req,res)=>{
   const id = req.params.id;
   try{
-    const result = await vendorCollection.deleteOne({_id:ObjectId(id)});
+    const result = await vendorCollection.deleteOne({_id: new ObjectId(id)});
     res.status(200).json(result);
   
   }catch(error){
