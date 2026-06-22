@@ -50,13 +50,37 @@ async function run() {
 
 app.get('/vendor/my-added-tickets',async (req,res)=>{
  try{
-  const result = await vendorCollection.find({});
+  const result = await vendorCollection.find({}).toArray();
   res.status (200).json(result);
  }catch(error){
   res.status(500).json(error);
  }
 })
 
+
+//get api 
+app.get('/vendor/ticket-details/:id',async(req,res)=>{
+  const id =req.params.id;
+  try{
+    const result =await vendorCollection.findOne({_id: ObjectId(id)});
+    res.status(200).json(result);
+  }catch(error){
+    res.status(500).json(error);
+  }
+})
+
+
+//delete api
+app.delete('/vendor/delete-ticket/:id',async(req,res)=>{
+  const id = req.params.id;
+  try{
+    const result = await vendorCollection.deleteOne({_id:ObjectId(id)});
+    res.status(200).json(result);
+  
+  }catch(error){
+    res.status(500).json(error);
+  }
+})
 
 
 
