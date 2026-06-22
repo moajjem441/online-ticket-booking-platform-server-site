@@ -98,6 +98,20 @@ app.get('/admin/all-tickets', async (req, res) => {
 });
 
 
+// একদম মিনিমাম কোড (ঝুঁকি আছে, তবে কাজ করবে)
+app.patch('/admin/tickets/status/:id', async (req, res) => {
+  try {
+    const result = await vendorCollection.updateOne(
+      { _id: new ObjectId(req.params.id) },
+      { $set: { verificationStatus: req.body.verificationStatus } }
+    );
+    res.status(200).json({ success: true, result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
 
 
 
