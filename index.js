@@ -31,7 +31,76 @@ async function run() {
  const vendorCollection = db.collection("vendor");
  const userCollection = db.collection("user");
 
- //vendor api 
+ const bookingCollection = db.collection("bookings");
+
+
+
+
+
+
+
+
+
+// 📩 ১. ভেন্ডরের কাছে আসা সব বুকিং রিকোয়েস্ট গেট করার এপিআই
+app.get('/vendor/requested-bookings', async (req, res) => {
+  try {
+    // রিয়াল প্রজেক্টে এখানে ভেন্ডরের ইমেইল দিয়ে ফিল্টার করতে পারেন, আপাতত সব বুকিং আনা হচ্ছে
+    const result = await bookingCollection.find({ status: "pending" }).toArray();
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch bookings", error: error.message });
+  }
+});
+
+
+// 🔄 ২. বুকিং এক্সেপ্ট বা রিজেক্ট করার এপিআই
+app.patch('/vendor/bookings/status/:id', async (req, res) => {
+  const id = req.params.id;
+  const { action, ticketId, bookingQuantity } = req.body; // action: 'accepted' অথবা 'rejected'
+
+  if (!ObjectId.isValid(id)) {
+    return res.status(400).json({ message: "Invalid Booking ID format" });
+  }
+
+  try {
+    // ক) যদি ভেন্ডর রিকোয়েস্ট ACCEPT করে
+    if (action === 'accepted') {
+      // প্রথমে টিকিট আইডি ভ্যালিড কিনা দেখে নিন
+      if (!ObjectId.isValid(ticketId)) {
+        return res.status(400).json({ message: "Invalid Ticket ID format" });
+      }
+
+      // বুকিং এক্সেপ্ট করার আগে মেইন টিকিট কালেকশন থেকে কোয়ান্টিটি কমিয়ে দিন ($inc: -quantity)
+      const ticketUpdate = await vendorCollection.updateOne(
+        { _id: new ObjectId(ticketId), quantity: { $gte: parseInt(bookingQuantity) } }, // স্টক যেন বুকিং পরিমাণের চেয়ে বেশি বা সমান থাকে
+        { $inc: { quantity: -parseInt(bookingQuantity) } }
+      );
+
+      // যদি স্টক না থাকে বা টিকিটটি খুঁজে না পাওয়া যায়
+      if (ticketUpdate.modifiedCount === 0) {
+        return res.status(400).json({ success: false, message: "Failed to accept. Insufficient ticket stock!" });
+      }
+    }
+
+    // খ) এবার বুকিং স্ট্যাটাস আপডেট করুন (Accept বা Reject যাই হোক না কেন)
+    const result = await bookingCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { status: action } } // status হবে 'accepted' অথবা 'rejected'
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ success: false, message: "Booking request not found" });
+    }
+
+    res.status(200).json({ 
+      success: true, 
+      message: `Booking request successfully ${action === 'accepted' ? 'Accepted' : 'Rejected'}.` 
+    });
+
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
 
 
  //post api
