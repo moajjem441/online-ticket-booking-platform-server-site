@@ -29,6 +29,7 @@ async function run() {
 
  const db = client.db("online-ticket-booking-platform");
  const vendorCollection = db.collection("vendor");
+ const userCollection = db.collection("user");
 
  //vendor api 
 
@@ -172,6 +173,55 @@ app.delete('/vendor/my-added-tickets/:id',async(req,res)=>{
     res.status(500).json(error);
   }
 })
+
+
+
+// এই কোডটি আপনার MongoClient এর run() ফাংশনের ভেতরে অন্যান্য এপিআই এর সাথে রাখুন
+
+
+// 👥 অ্যাডমিন কর্তৃক ইউজারের রোল বা ফ্রড স্ট্যাটাস আপডেট করার এপিআই
+app.patch('/admin/users/role/:id', async (req, res) => {
+  const id = req.params.id;
+  const { role, isFraud } = req.body; // ফ্রন্টএন্ড থেকে role অথবা isFraud পাঠানো হবে
+
+  if (!ObjectId.isValid(id)) {
+    return res.status(400).json({ message: "Invalid ID format" });
+  }
+
+  try {
+    // ডাইনামিকালি অবজেক্ট তৈরি করছি যা আপডেট করা হবে
+    let updateFields = {};
+    
+    if (role) updateFields.role = role; // 'admin' অথবা 'vendor' অথবা 'user'
+    if (isFraud !== undefined) updateFields.isFraud = isFraud; // true অথবা false
+
+    const result = await userCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updateFields }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    res.status(200).json({ 
+      success: true, 
+      message: "User status updated successfully!" 
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
+// সব ইউজারদের ডাটা নিয়ে আসার এপিআই (ইউজার লিস্ট টেবিল দেখানোর জন্য)
+app.get('/admin/all-users', async (req, res) => {
+  try {
+    const result = await userCollection.find({}).toArray();
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch users", error: error.message });
+  }
+});
 
 
 
