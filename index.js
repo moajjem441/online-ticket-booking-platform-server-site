@@ -112,6 +112,52 @@ app.patch('/admin/tickets/status/:id', async (req, res) => {
 });
 
 
+//advertisement api
+
+// অ্যাডমিন নির্দিষ্ট টিকিট Advertise বা Unadvertise করার জন্য
+app.patch('/admin/tickets/advertise/:id', async (req, res) => {
+  const id = req.params.id;
+  const { isAdvertised } = req.body; // ফ্রন্টএন্ড থেকে true অথবা false আসবে
+
+  if (!ObjectId.isValid(id)) {
+    return res.status(400).json({ message: "Invalid ID format" });
+  }
+
+  try {
+    // ১. যদি ফ্রন্টএন্ড থেকে টিকিটটি Advertise (true) করতে বলা হয়
+    if (isAdvertised === true) {
+      // ডাটাবেজে অলরেডি কয়টি টিকিট advertised অবস্থায় আছে তা কাউন্ট করি
+      const advertisedCount = await vendorCollection.countDocuments({ isAdvertised: true });
+      
+      // যদি অলরেডি ৬ বা তার বেশি থাকে, তবে নতুন করে করতে দেবো না
+      if (advertisedCount >= 6) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Limit reached! You cannot advertise more than 6 tickets at a time." 
+        });
+      }
+    }
+
+    // ২. লিমিট ঠিক থাকলে বা Unadvertise (false) করতে চাইলে ডাটাবেজ আপডেট করি
+    const result = await vendorCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { isAdvertised: isAdvertised } }
+    );
+
+    if (result.modifiedCount === 0) {
+      return res.status(404).json({ message: "Ticket not found or status unchanged" });
+    }
+
+    res.status(200).json({ 
+      success: true, 
+      message: `Ticket successfully ${isAdvertised ? 'Advertised' : 'Unadvertised'}` 
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
+
 
 
 
