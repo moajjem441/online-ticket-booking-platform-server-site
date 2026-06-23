@@ -176,7 +176,7 @@ app.delete('/vendor/my-added-tickets/:id',async(req,res)=>{
 
 
 
-// এই কোডটি আপনার MongoClient এর run() ফাংশনের ভেতরে অন্যান্য এপিআই এর সাথে রাখুন
+
 
 
 // 👥 অ্যাডমিন কর্তৃক ইউজারের রোল বা ফ্রড স্ট্যাটাস আপডেট করার এপিআই
@@ -222,6 +222,7 @@ app.get('/admin/all-users', async (req, res) => {
     res.status(500).json({ message: "Failed to fetch users", error: error.message });
   }
 });
+
 
 
 
