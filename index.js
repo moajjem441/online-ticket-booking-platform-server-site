@@ -110,15 +110,15 @@ app.patch('/vendor/bookings/status/:id', async (req, res) => {
 
 
 
-// app.get('/bookings/:email', async (req, res) => {
-//   const email = req.params.email;
+app.get('/bookings/:email', async (req, res) => {
+  const email = req.params.email;
 
-//   const result = await bookingCollection.find({
-//     userEmail: email
-//   }).toArray();
+  const result = await bookingCollection.find({
+    userEmail: email
+  }).toArray();
 
-//   res.send(result);
-// });
+  res.send(result);
+});
 
 
 
