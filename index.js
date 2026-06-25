@@ -36,7 +36,13 @@ async function run() {
 
 
 
+// app.post("/bookings/new", async(req,res)=>{
+//     const booking = req.body;
 
+//     const result = await bookingCollection.insertOne(booking);
+
+//     res.send(result);
+// });
 
 
 
@@ -101,6 +107,22 @@ app.patch('/vendor/bookings/status/:id', async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 });
+
+
+
+// app.get('/bookings/:email', async (req, res) => {
+//   const email = req.params.email;
+
+//   const result = await bookingCollection.find({
+//     userEmail: email
+//   }).toArray();
+
+//   res.send(result);
+// });
+
+
+
+
 
 
  //post api
