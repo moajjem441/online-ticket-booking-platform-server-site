@@ -36,13 +36,13 @@ async function run() {
 
 
 
-// app.post("/bookings/new", async(req,res)=>{
-//     const booking = req.body;
+app.post("/bookings/new", async(req,res)=>{
+    const booking = req.body;
 
-//     const result = await bookingCollection.insertOne(booking);
+    const result = await bookingCollection.insertOne(booking);
 
-//     res.send(result);
-// });
+    res.send(result);
+});
 
 
 
