@@ -135,6 +135,79 @@ app.get('/transactions/:email', async (req, res) => {
 
 
 
+// ১. রেভিনিউ এবং চার্ট অ্যানালিটিক্স এন্ডপয়েন্ট
+app.get("/vendor/revenue-stats", async (req, res) => {
+  try {
+    // ক) আপনার অ্যাড করা মোট টিকিটের সংখ্যা বের করা (Ticket Collection থেকে)
+    // মনে করুন আপনার টিকিট কালেকশনের নাম 'tickets'
+    const myTickets = await db.collection("tickets").find({}).toArray(); 
+    const totalAdded = myTickets.length;
+
+    // খ) বুকিং কালেকশন থেকে শুধুমাত্র "paid" বুকিংগুলো ফিল্টার করা
+    const paidBookings = await db.collection("bookings").find({ status: "paid" }).toArray();
+
+    let totalSold = 0;
+    let totalRevenue = 0;
+
+    // তারিখ অনুযায়ী চার্টের ডেটা গ্রুপ করার জন্য একটি অবজেক্ট
+    const dailyDataMap = {};
+
+    paidBookings.forEach((booking) => {
+      const qty = Number(booking.bookingQuantity) || 0;
+      const price = Number(booking.totalPrice) || (Number(booking.unitPrice) * qty);
+
+      totalSold += qty;
+      totalRevenue += price;
+
+      // চার্টের জন্য তারিখ ফরম্যাট করা (যেমন: "2026-06-30" থেকে "June 30")
+      if (booking.departureDate) {
+        const dateObj = new Date(booking.departureDate);
+        const formattedDate = dateObj.toLocaleDateString("en-US", { month: "short", day: "2-digit" });
+
+        if (!dailyDataMap[formattedDate]) {
+          dailyDataMap[formattedDate] = { name: formattedDate, Added: 0, Sold: 0, Revenue: 0 };
+        }
+        dailyDataMap[formattedDate].Sold += qty;
+        dailyDataMap[formattedDate].Revenue += price;
+      }
+    });
+
+    // আপনার অ্যাড করা টিকিটগুলোকেও তারিখ অনুযায়ী চার্টে ম্যাপ করা (ঐচ্ছিক)
+    myTickets.forEach((ticket) => {
+      // মনে করুন টিকিটের একটি createdAt বা departureDate ফিল্ড আছে
+      if (ticket.departureDate) {
+        const dateObj = new Date(ticket.departureDate);
+        const formattedDate = dateObj.toLocaleDateString("en-US", { month: "short", day: "2-digit" });
+
+        if (!dailyDataMap[formattedDate]) {
+          dailyDataMap[formattedDate] = { name: formattedDate, Added: 0, Sold: 0, Revenue: 0 };
+        }
+        dailyDataMap[formattedDate].Added += 1;
+      }
+    });
+
+    // অবজেক্ট ম্যাপটিকে রিচার্টস (Recharts) এর জন্য অ্যারেতে কনভার্ট করা
+    const chartData = Object.values(dailyDataMap).sort((a, b) => new Date(a.name) - new Date(b.name));
+
+    // ফ্রন্টএন্ডে রেসপন্স পাঠানো
+    res.status(200).json({
+      totalAdded: totalAdded,
+      totalSold: totalSold,
+      totalRevenue: totalRevenue,
+      chartData: chartData.length > 0 ? chartData : [
+        { name: 'No Data', Added: 0, Sold: 0, Revenue: 0 }
+      ]
+    });
+
+  } catch (error) {
+    console.error("Analytics Error:", error);
+    res.status(500).json({ message: "Internal server error in analytics" });
+  }
+});
+
+
+
+
 
 // 📩 ১. ভেন্ডরের কাছে আসা সব বুকিং রিকোয়েস্ট গেট করার এপিআই
 app.get('/vendor/requested-bookings', async (req, res) => {
