@@ -46,7 +46,7 @@ app.post("/bookings/new", async(req,res)=>{
 
 
 
-// 🔄 বুকিং স্ট্যাটাস 'paid' করা এবং টিকিটের কোয়ান্টিটি কমানো
+// 🔄 বুকিং স্ট্যাটাস 'paid' করা এবং মেইন টিকিট কালেকশন (vendorCollection) থেকে কোয়ান্টিটি কমানো
 app.patch("/bookings/update-status/:id", async (req, res) => {
     try {
         const bookingId = req.params.id;
@@ -66,7 +66,7 @@ app.patch("/bookings/update-status/:id", async (req, res) => {
             return res.status(404).send({ error: "Booking not found" });
         }
 
-        // সেফটি চেক: অলরেডি পেইড হলে কোড এখানেই স্টপ হবে
+        // সেফটি চেক: অলরেডি পেইড হলে কোড এখানেই স্টপ হবে (ডাবল স্টক মাইনাস রোধ করতে)
         if (booking.status === 'paid') {
             return res.send({ message: "Already paid", modifiedCount: 0 });
         }
@@ -77,17 +77,17 @@ app.patch("/bookings/update-status/:id", async (req, res) => {
             { $set: { status: status || 'paid' } }
         );
 
-        // ৪. টিকিট কালেকশন থেকে বুকিং কোয়ান্টিটি মাইনাস করা
+        // ৪. আপনার মূল টিকিট কালেকশন (vendorCollection) থেকে বুকিং কোয়ান্টিটি মাইনাস করা
         if ((status?.toLowerCase() === 'paid' || !status) && booking.ticketId) {
             
-            // মঙ্গোডিবি-র $inc অপারেটরে মাইনাস ভ্যালু দিলে স্টক কমে যায়
+            // মঙ্গোডিবি-র $inc অপারেটরে ঋণাত্মক (Negative) ভ্যালু দিলে স্টক কমে যায়
             const quantityToReduce = -Number(booking.bookingQuantity || 1);
 
-            // 💡 আপনার ডেটায় ticketId যেহেতু স্ট্রিং আকারে আছে, 
-            // তাই টিকিট কালেকশনে খোঁজার জন্য এটিকে অবশ্যই new ObjectId() দিয়ে কনভার্ট করতে হবে
-            await ticketCollection.updateOne(
+            // 💡 ফিক্স: 'ticketCollection' এর বদলে 'vendorCollection' ব্যবহার করা হয়েছে 
+            // এবং স্টক ফিল্ডের নাম 'quantity' করা হয়েছে (আপনার ভেন্ডর এক্সেপ্ট রাউটের সাথে মিলিয়ে)
+            await vendorCollection.updateOne(
                 { _id: new ObjectId(booking.ticketId) }, 
-                { $inc: { availableQuantity: quantityToReduce } } // নিশ্চিত হোন আপনার টিকিট স্টক ফিল্ডের নাম 'availableQuantity' কিনা
+                { $inc: { quantity: quantityToReduce } } 
             );
             console.log(`📉 Ticket stock reduced by: ${booking.bookingQuantity}`);
         }
@@ -97,10 +97,9 @@ app.patch("/bookings/update-status/:id", async (req, res) => {
 
     } catch (error) {
         console.error("❌ Error inside PATCH /bookings/update-status:", error);
-        res.status(500).send({ error: "Internal Server Error" });
+        res.status(500).send({ error: "Internal Server Error", details: error.message });
     }
 });
-
 
 
 app.get('/bookings/:email', async (req, res) => {
@@ -111,6 +110,26 @@ app.get('/bookings/:email', async (req, res) => {
   }).toArray();
 
   res.send(result);
+});
+
+
+
+// 💳 ইউজারের সফল স্ট্রাইপ ট্রানজেকশন হিস্ট্রি গেট করার এপিআই
+app.get('/transactions/:email', async (req, res) => {
+  try {
+    const email = req.params.email;
+
+    // শুধুমাত্র 'paid' স্ট্যাটাসের বুকিংগুলো ফিল্টার করা হচ্ছে
+    const result = await bookingCollection.find({
+      userEmail: email,
+      status: "paid"
+    }).toArray();
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("❌ Error fetching transaction history:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
 });
 
 
