@@ -138,62 +138,57 @@ app.get('/transactions/:email', async (req, res) => {
 // ১. রেভিনিউ এবং চার্ট অ্যানালিটিক্স এন্ডপয়েন্ট
 app.get("/vendor/revenue-stats", async (req, res) => {
   try {
-    // ক) আপনার অ্যাড করা মোট টিকিটের সংখ্যা বের করা (Ticket Collection থেকে)
-    // মনে করুন আপনার টিকিট কালেকশনের নাম 'tickets'
-    const myTickets = await db.collection("tickets").find({}).toArray(); 
-    const totalAdded = myTickets.length;
-
-    // খ) বুকিং কালেকশন থেকে শুধুমাত্র "paid" বুকিংগুলো ফিল্টার করা
-    const paidBookings = await db.collection("bookings").find({ status: "paid" }).toArray();
+    // ১. বুকিং কালেকশন থেকে সব ডাটা নিয়ে আসা (মোট ৫টি ডাটাই চলে আসবে)
+    const allBookings = await db.collection("bookings").find({}).toArray();
+    
+    // ২. "1 – 5 of 5" অনুযায়ী মোট যতগুলো ডকুমেন্ট আছে, সেটাই আপনার Total Added
+    const totalAdded = allBookings.length; // এখানে নিখুঁতভাবে ৫ চলে আসবে
 
     let totalSold = 0;
     let totalRevenue = 0;
 
-    // তারিখ অনুযায়ী চার্টের ডেটা গ্রুপ করার জন্য একটি অবজেক্ট
+    // তারিখ অনুযায়ী চার্টের ডেটা গ্রুপ করার জন্য অবজেক্ট
     const dailyDataMap = {};
 
-    paidBookings.forEach((booking) => {
+    allBookings.forEach((booking) => {
       const qty = Number(booking.bookingQuantity) || 0;
       const price = Number(booking.totalPrice) || (Number(booking.unitPrice) * qty);
 
-      totalSold += qty;
-      totalRevenue += price;
+      // ৩. রেভিনিউ এবং সেলস শুধু পেইড টিকিটের ওপর হিসাব হবে
+      if (booking.status === "paid") {
+        totalSold += qty;
+        totalRevenue += price;
+      }
 
-      // চার্টের জন্য তারিখ ফরম্যাট করা (যেমন: "2026-06-30" থেকে "June 30")
+      // ৪. চার্টের জন্য ডেট ট্র্যাকিং ও পুশ লজিক
       if (booking.departureDate) {
+        // তারিখ ফরম্যাট করা (যেমন: "2026-06-30" থেকে "Jun 30")
         const dateObj = new Date(booking.departureDate);
         const formattedDate = dateObj.toLocaleDateString("en-US", { month: "short", day: "2-digit" });
 
         if (!dailyDataMap[formattedDate]) {
           dailyDataMap[formattedDate] = { name: formattedDate, Added: 0, Sold: 0, Revenue: 0 };
         }
-        dailyDataMap[formattedDate].Sold += qty;
-        dailyDataMap[formattedDate].Revenue += price;
-      }
-    });
 
-    // আপনার অ্যাড করা টিকিটগুলোকেও তারিখ অনুযায়ী চার্টে ম্যাপ করা (ঐচ্ছিক)
-    myTickets.forEach((ticket) => {
-      // মনে করুন টিকিটের একটি createdAt বা departureDate ফিল্ড আছে
-      if (ticket.departureDate) {
-        const dateObj = new Date(ticket.departureDate);
-        const formattedDate = dateObj.toLocaleDateString("en-US", { month: "short", day: "2-digit" });
-
-        if (!dailyDataMap[formattedDate]) {
-          dailyDataMap[formattedDate] = { name: formattedDate, Added: 0, Sold: 0, Revenue: 0 };
-        }
+        // ৫টি ডকুমেন্টের প্রত্যেকটির জন্যই চার্টের "Added" বার-টি ১ করে বাড়বে
         dailyDataMap[formattedDate].Added += 1;
+
+        // শুধু পেইড ট্রানজেকশনের ডাটা চার্টের "Sold" এবং "Revenue" তে যোগ হবে
+        if (booking.status === "paid") {
+          dailyDataMap[formattedDate].Sold += qty;
+          dailyDataMap[formattedDate].Revenue += price;
+        }
       }
     });
 
-    // অবজেক্ট ম্যাপটিকে রিচার্টস (Recharts) এর জন্য অ্যারেতে কনভার্ট করা
+    // অবজেক্ট Mapped ডেটাকে Recharts চার্টের জন্য ক্রনোলজিক্যাল অর্ডারে সর্ট করা
     const chartData = Object.values(dailyDataMap).sort((a, b) => new Date(a.name) - new Date(b.name));
 
     // ফ্রন্টএন্ডে রেসপন্স পাঠানো
     res.status(200).json({
-      totalAdded: totalAdded,
-      totalSold: totalSold,
-      totalRevenue: totalRevenue,
+      totalAdded: totalAdded,     // কাউন্টারে এখন সরাসরি ৫ দেখাবে
+      totalSold: totalSold,       // শুধু 'paid' টিকিটগুলোর টোটাল কোয়ান্টিটি
+      totalRevenue: totalRevenue, // শুধু 'paid' টিকিটগুলোর মোট মূল্য
       chartData: chartData.length > 0 ? chartData : [
         { name: 'No Data', Added: 0, Sold: 0, Revenue: 0 }
       ]
@@ -204,7 +199,6 @@ app.get("/vendor/revenue-stats", async (req, res) => {
     res.status(500).json({ message: "Internal server error in analytics" });
   }
 });
-
 
 
 
