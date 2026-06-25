@@ -46,49 +46,73 @@ app.post("/bookings/new", async(req,res)=>{
 
 
 
-// 🔄 বুকিং স্ট্যাটাস 'paid' করা এবং টিকিটের কোয়ান্টিটি কমানো
+// 🔄 বুকিং স্ট্যাটাস 'paid' করা এবং টিকিটের কোয়ান্টিটি কমানো
 app.patch("/bookings/update-status/:id", async (req, res) => {
     try {
         const bookingId = req.params.id;
-        const { status } = req.body; // ফ্রন্টএন্ড থেকে { status: 'paid' } পাঠানো হবে
+        const { status } = req.body; // ফ্রন্টএন্ড থেকে { status: 'paid' } আসবে
 
-        // ১. প্রথমে ওই বুকিংয়ের বর্তমান তথ্য ডাটাবেজ থেকে খুঁজে বের করা (টিকিট আইডি ও কোয়ান্টিটি জানার জন্য)
+        // ১. আইডি ভ্যালিডেশন চেক
+        if (!ObjectId.isValid(bookingId)) {
+            console.error("❌ Invalid Booking ID format:", bookingId);
+            return res.status(400).send({ error: "Invalid Booking ID format" });
+        }
+
+        // ২. ডাটাবেজ থেকে বুকিং খুঁজে বের করা
         const booking = await bookingCollection.findOne({ _id: new ObjectId(bookingId) });
         
         if (!booking) {
+            console.error("❌ Booking not found for ID:", bookingId);
             return res.status(404).send({ error: "Booking not found" });
         }
 
-        // সেফটি চেক: যদি ইতিমধ্যে paid হয়ে থাকে, তবে আর ডাবল আপডেট বা কোয়ান্টিটি মাইনাস করব না
+        // সেফটি চেক: অলরেডি পেইড হলে কোড এখানেই স্টপ হবে
         if (booking.status === 'paid') {
             return res.send({ message: "Already paid", modifiedCount: 0 });
         }
 
-        // ২. বুকিং কালেকশনে স্ট্যাটাস আপডেট করা
+        // ৩. বুকিং কালেকশনে স্ট্যাটাস আপডেট করা
         const updateBookingResult = await bookingCollection.updateOne(
             { _id: new ObjectId(bookingId) },
             { $set: { status: status || 'paid' } }
         );
 
-        // ৩. বুকিং স্ট্যাটাস যদি 'paid' হয়, তবে টিকিটের কালেকশন থেকে কোয়ান্টিটি মাইনাস করা
-        if (status?.toLowerCase() === 'paid' && booking.ticketId) {
+        // ৪. টিকিট কালেকশন থেকে বুকিং কোয়ান্টিটি মাইনাস করা
+        if ((status?.toLowerCase() === 'paid' || !status) && booking.ticketId) {
             
-            // মঙ্গোডিবি-র $inc অপারেটরে মাইনাস ভ্যালু দিলে সেটি স্বয়ংক্রিয়ভাবে স্টক কমিয়ে দেয়
+            // মঙ্গোডিবি-র $inc অপারেটরে মাইনাস ভ্যালু দিলে স্টক কমে যায়
             const quantityToReduce = -Number(booking.bookingQuantity || 1);
 
+            // 💡 আপনার ডেটায় ticketId যেহেতু স্ট্রিং আকারে আছে, 
+            // তাই টিকিট কালেকশনে খোঁজার জন্য এটিকে অবশ্যই new ObjectId() দিয়ে কনভার্ট করতে হবে
             await ticketCollection.updateOne(
-                { _id: new ObjectId(booking.ticketId) }, // আপনার টিকিট আইডি যদি ObjectId হয় তবে new ObjectId(booking.ticketId) লিখবেন
-                { $inc: { availableQuantity: quantityToReduce } } // 'availableQuantity' এর জায়গায় আপনার টিকিটের স্টক ফিল্ডের নাম দিন
+                { _id: new ObjectId(booking.ticketId) }, 
+                { $inc: { availableQuantity: quantityToReduce } } // নিশ্চিত হোন আপনার টিকিট স্টক ফিল্ডের নাম 'availableQuantity' কিনা
             );
+            console.log(`📉 Ticket stock reduced by: ${booking.bookingQuantity}`);
         }
 
+        console.log(`🎯 Booking ${bookingId} successfully marked as PAID.`);
         res.send(updateBookingResult);
 
     } catch (error) {
-        console.error("Error updating booking status:", error);
+        console.error("❌ Error inside PATCH /bookings/update-status:", error);
         res.status(500).send({ error: "Internal Server Error" });
     }
 });
+
+
+
+app.get('/bookings/:email', async (req, res) => {
+  const email = req.params.email;
+
+  const result = await bookingCollection.find({
+    userEmail: email
+  }).toArray();
+
+  res.send(result);
+});
+
 
 
 
@@ -156,15 +180,6 @@ app.patch('/vendor/bookings/status/:id', async (req, res) => {
 
 
 
-app.get('/bookings/:email', async (req, res) => {
-  const email = req.params.email;
-
-  const result = await bookingCollection.find({
-    userEmail: email
-  }).toArray();
-
-  res.send(result);
-});
 
 
 
