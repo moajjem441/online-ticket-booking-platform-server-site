@@ -46,6 +46,52 @@ app.post("/bookings/new", async(req,res)=>{
 
 
 
+// 🔄 বুকিং স্ট্যাটাস 'paid' করা এবং টিকিটের কোয়ান্টিটি কমানো
+app.patch("/bookings/update-status/:id", async (req, res) => {
+    try {
+        const bookingId = req.params.id;
+        const { status } = req.body; // ফ্রন্টএন্ড থেকে { status: 'paid' } পাঠানো হবে
+
+        // ১. প্রথমে ওই বুকিংয়ের বর্তমান তথ্য ডাটাবেজ থেকে খুঁজে বের করা (টিকিট আইডি ও কোয়ান্টিটি জানার জন্য)
+        const booking = await bookingCollection.findOne({ _id: new ObjectId(bookingId) });
+        
+        if (!booking) {
+            return res.status(404).send({ error: "Booking not found" });
+        }
+
+        // সেফটি চেক: যদি ইতিমধ্যে paid হয়ে থাকে, তবে আর ডাবল আপডেট বা কোয়ান্টিটি মাইনাস করব না
+        if (booking.status === 'paid') {
+            return res.send({ message: "Already paid", modifiedCount: 0 });
+        }
+
+        // ২. বুকিং কালেকশনে স্ট্যাটাস আপডেট করা
+        const updateBookingResult = await bookingCollection.updateOne(
+            { _id: new ObjectId(bookingId) },
+            { $set: { status: status || 'paid' } }
+        );
+
+        // ৩. বুকিং স্ট্যাটাস যদি 'paid' হয়, তবে টিকিটের কালেকশন থেকে কোয়ান্টিটি মাইনাস করা
+        if (status?.toLowerCase() === 'paid' && booking.ticketId) {
+            
+            // মঙ্গোডিবি-র $inc অপারেটরে মাইনাস ভ্যালু দিলে সেটি স্বয়ংক্রিয়ভাবে স্টক কমিয়ে দেয়
+            const quantityToReduce = -Number(booking.bookingQuantity || 1);
+
+            await ticketCollection.updateOne(
+                { _id: new ObjectId(booking.ticketId) }, // আপনার টিকিট আইডি যদি ObjectId হয় তবে new ObjectId(booking.ticketId) লিখবেন
+                { $inc: { availableQuantity: quantityToReduce } } // 'availableQuantity' এর জায়গায় আপনার টিকিটের স্টক ফিল্ডের নাম দিন
+            );
+        }
+
+        res.send(updateBookingResult);
+
+    } catch (error) {
+        console.error("Error updating booking status:", error);
+        res.status(500).send({ error: "Internal Server Error" });
+    }
+});
+
+
+
 
 // 📩 ১. ভেন্ডরের কাছে আসা সব বুকিং রিকোয়েস্ট গেট করার এপিআই
 app.get('/vendor/requested-bookings', async (req, res) => {
