@@ -5,6 +5,8 @@ const cors =require('cors');
 const port = process.env.PORT;
 
 const { MongoClient, ServerApiVersion,ObjectId } = require('mongodb');
+const { createRemoteJWKSet, jwtVerify } = require('jose-cjs');
+
 const uri =process.env.MONGO_URL
 
 
@@ -21,9 +23,52 @@ const client = new MongoClient(uri, {
   }
 });
 
+
+// -----------------jwt---------------
+
+const JWKS = createRemoteJWKSet(
+  new URL(`${process.env.CLIENT_URL}/api/auth/jwks`)
+)
+
+
+const verifyToken =async (req,res,next)=>{
+  const authHeader=req?.headers.authorization
+  if(!authHeader){
+    return res.status(401).json({message:"Unauthorized"})
+  }
+  const token = authHeader.split(" ")[1]
+
+  if(!token){
+    return res.status(401).json({message:"Unauthorized"})
+  }
+  console.log(token)
+
+
+
+  try{
+    const {payload}=await jwtVerify(token,JWKS)
+
+  console.log(payload)
+
+   next()
+  }catch(error){
+    return res.status(403).json({message:
+      "Forbidden"
+    });
+  }
+ 
+}
+
+
+
+
+
+
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
+
+    //deploy korar somoy eta comment out korbo
     await client.connect();
 
 
@@ -46,57 +91,56 @@ app.post("/bookings/new", async(req,res)=>{
 
 
 
-// 🔄 বুকিং স্ট্যাটাস 'paid' করা এবং মেইন টিকিট কালেকশন (vendorCollection) থেকে কোয়ান্টিটি কমানো
+
 app.patch("/bookings/update-status/:id", async (req, res) => {
     try {
         const bookingId = req.params.id;
-        const { status } = req.body; // ফ্রন্টএন্ড থেকে { status: 'paid' } আসবে
+        const { status } = req.body; 
 
-        // ১. আইডি ভ্যালিডেশন চেক
+     
         if (!ObjectId.isValid(bookingId)) {
-            console.error("❌ Invalid Booking ID format:", bookingId);
+            console.error(" Invalid Booking ID format:", bookingId);
             return res.status(400).send({ error: "Invalid Booking ID format" });
         }
 
-        // ২. ডাটাবেজ থেকে বুকিং খুঁজে বের করা
+    
         const booking = await bookingCollection.findOne({ _id: new ObjectId(bookingId) });
         
         if (!booking) {
-            console.error("❌ Booking not found for ID:", bookingId);
+            console.error(" Booking not found for ID:", bookingId);
             return res.status(404).send({ error: "Booking not found" });
         }
 
-        // সেফটি চেক: অলরেডি পেইড হলে কোড এখানেই স্টপ হবে (ডাবল স্টক মাইনাস রোধ করতে)
+        
         if (booking.status === 'paid') {
             return res.send({ message: "Already paid", modifiedCount: 0 });
         }
 
-        // ৩. বুকিং কালেকশনে স্ট্যাটাস আপডেট করা
+        
         const updateBookingResult = await bookingCollection.updateOne(
             { _id: new ObjectId(bookingId) },
             { $set: { status: status || 'paid' } }
         );
 
-        // ৪. আপনার মূল টিকিট কালেকশন (vendorCollection) থেকে বুকিং কোয়ান্টিটি মাইনাস করা
+       
         if ((status?.toLowerCase() === 'paid' || !status) && booking.ticketId) {
             
-            // মঙ্গোডিবি-র $inc অপারেটরে ঋণাত্মক (Negative) ভ্যালু দিলে স্টক কমে যায়
+            
             const quantityToReduce = -Number(booking.bookingQuantity || 1);
 
-            // 💡 ফিক্স: 'ticketCollection' এর বদলে 'vendorCollection' ব্যবহার করা হয়েছে 
-            // এবং স্টক ফিল্ডের নাম 'quantity' করা হয়েছে (আপনার ভেন্ডর এক্সেপ্ট রাউটের সাথে মিলিয়ে)
+      
             await vendorCollection.updateOne(
                 { _id: new ObjectId(booking.ticketId) }, 
                 { $inc: { quantity: quantityToReduce } } 
             );
-            console.log(`📉 Ticket stock reduced by: ${booking.bookingQuantity}`);
+            console.log(` Ticket stock reduced by: ${booking.bookingQuantity}`);
         }
 
-        console.log(`🎯 Booking ${bookingId} successfully marked as PAID.`);
+        console.log(` Booking ${bookingId} successfully marked as PAID.`);
         res.send(updateBookingResult);
 
     } catch (error) {
-        console.error("❌ Error inside PATCH /bookings/update-status:", error);
+        console.error(" Error inside PATCH /bookings/update-status:", error);
         res.status(500).send({ error: "Internal Server Error", details: error.message });
     }
 });
@@ -114,12 +158,13 @@ app.get('/bookings/:email', async (req, res) => {
 
 
 
-// 💳 ইউজারের সফল স্ট্রাইপ ট্রানজেকশন হিস্ট্রি গেট করার এপিআই
+
+
 app.get('/transactions/:email', async (req, res) => {
   try {
     const email = req.params.email;
 
-    // শুধুমাত্র 'paid' স্ট্যাটাসের বুকিংগুলো ফিল্টার করা হচ্ছে
+   
     const result = await bookingCollection.find({
       userEmail: email,
       status: "paid"
@@ -127,7 +172,7 @@ app.get('/transactions/:email', async (req, res) => {
 
     res.status(200).json(result);
   } catch (error) {
-    console.error("❌ Error fetching transaction history:", error);
+    console.error(" Error fetching transaction history:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 });
@@ -135,34 +180,34 @@ app.get('/transactions/:email', async (req, res) => {
 
 
 
-// ১. রেভিনিউ এবং চার্ট অ্যানালিটিক্স এন্ডপয়েন্ট
+
 app.get("/vendor/revenue-stats", async (req, res) => {
   try {
-    // ১. বুকিং কালেকশন থেকে সব ডাটা নিয়ে আসা (মোট ৫টি ডাটাই চলে আসবে)
+    
     const allBookings = await db.collection("bookings").find({}).toArray();
     
-    // ২. "1 – 5 of 5" অনুযায়ী মোট যতগুলো ডকুমেন্ট আছে, সেটাই আপনার Total Added
-    const totalAdded = allBookings.length; // এখানে নিখুঁতভাবে ৫ চলে আসবে
+  
+    const totalAdded = allBookings.length; 
 
     let totalSold = 0;
     let totalRevenue = 0;
 
-    // তারিখ অনুযায়ী চার্টের ডেটা গ্রুপ করার জন্য অবজেক্ট
+  
     const dailyDataMap = {};
 
     allBookings.forEach((booking) => {
       const qty = Number(booking.bookingQuantity) || 0;
       const price = Number(booking.totalPrice) || (Number(booking.unitPrice) * qty);
 
-      // ৩. রেভিনিউ এবং সেলস শুধু পেইড টিকিটের ওপর হিসাব হবে
+   
       if (booking.status === "paid") {
         totalSold += qty;
         totalRevenue += price;
       }
 
-      // ৪. চার্টের জন্য ডেট ট্র্যাকিং ও পুশ লজিক
+     
       if (booking.departureDate) {
-        // তারিখ ফরম্যাট করা (যেমন: "2026-06-30" থেকে "Jun 30")
+        
         const dateObj = new Date(booking.departureDate);
         const formattedDate = dateObj.toLocaleDateString("en-US", { month: "short", day: "2-digit" });
 
@@ -170,10 +215,10 @@ app.get("/vendor/revenue-stats", async (req, res) => {
           dailyDataMap[formattedDate] = { name: formattedDate, Added: 0, Sold: 0, Revenue: 0 };
         }
 
-        // ৫টি ডকুমেন্টের প্রত্যেকটির জন্যই চার্টের "Added" বার-টি ১ করে বাড়বে
+       
         dailyDataMap[formattedDate].Added += 1;
 
-        // শুধু পেইড ট্রানজেকশনের ডাটা চার্টের "Sold" এবং "Revenue" তে যোগ হবে
+   
         if (booking.status === "paid") {
           dailyDataMap[formattedDate].Sold += qty;
           dailyDataMap[formattedDate].Revenue += price;
@@ -181,14 +226,13 @@ app.get("/vendor/revenue-stats", async (req, res) => {
       }
     });
 
-    // অবজেক্ট Mapped ডেটাকে Recharts চার্টের জন্য ক্রনোলজিক্যাল অর্ডারে সর্ট করা
     const chartData = Object.values(dailyDataMap).sort((a, b) => new Date(a.name) - new Date(b.name));
 
-    // ফ্রন্টএন্ডে রেসপন্স পাঠানো
+   
     res.status(200).json({
-      totalAdded: totalAdded,     // কাউন্টারে এখন সরাসরি ৫ দেখাবে
-      totalSold: totalSold,       // শুধু 'paid' টিকিটগুলোর টোটাল কোয়ান্টিটি
-      totalRevenue: totalRevenue, // শুধু 'paid' টিকিটগুলোর মোট মূল্য
+      totalAdded: totalAdded,     
+      totalSold: totalSold,       
+      totalRevenue: totalRevenue, 
       chartData: chartData.length > 0 ? chartData : [
         { name: 'No Data', Added: 0, Sold: 0, Revenue: 0 }
       ]
@@ -203,10 +247,12 @@ app.get("/vendor/revenue-stats", async (req, res) => {
 
 
 
-// 📩 ১. ভেন্ডরের কাছে আসা সব বুকিং রিকোয়েস্ট গেট করার এপিআই
+
+
+
 app.get('/vendor/requested-bookings', async (req, res) => {
   try {
-    // রিয়াল প্রজেক্টে এখানে ভেন্ডরের ইমেইল দিয়ে ফিল্টার করতে পারেন, আপাতত সব বুকিং আনা হচ্ছে
+
     const result = await bookingCollection.find({ status: "pending" }).toArray();
     res.status(200).json(result);
   } catch (error) {
@@ -215,39 +261,39 @@ app.get('/vendor/requested-bookings', async (req, res) => {
 });
 
 
-// 🔄 ২. বুকিং এক্সেপ্ট বা রিজেক্ট করার এপিআই
+
 app.patch('/vendor/bookings/status/:id', async (req, res) => {
   const id = req.params.id;
-  const { action, ticketId, bookingQuantity } = req.body; // action: 'accepted' অথবা 'rejected'
+  const { action, ticketId, bookingQuantity } = req.body; 
 
   if (!ObjectId.isValid(id)) {
     return res.status(400).json({ message: "Invalid Booking ID format" });
   }
 
   try {
-    // ক) যদি ভেন্ডর রিকোয়েস্ট ACCEPT করে
+   
     if (action === 'accepted') {
-      // প্রথমে টিকিট আইডি ভ্যালিড কিনা দেখে নিন
+  
       if (!ObjectId.isValid(ticketId)) {
         return res.status(400).json({ message: "Invalid Ticket ID format" });
       }
 
-      // বুকিং এক্সেপ্ট করার আগে মেইন টিকিট কালেকশন থেকে কোয়ান্টিটি কমিয়ে দিন ($inc: -quantity)
+  
       const ticketUpdate = await vendorCollection.updateOne(
-        { _id: new ObjectId(ticketId), quantity: { $gte: parseInt(bookingQuantity) } }, // স্টক যেন বুকিং পরিমাণের চেয়ে বেশি বা সমান থাকে
+        { _id: new ObjectId(ticketId), quantity: { $gte: parseInt(bookingQuantity) } }, 
         { $inc: { quantity: -parseInt(bookingQuantity) } }
       );
 
-      // যদি স্টক না থাকে বা টিকিটটি খুঁজে না পাওয়া যায়
+     
       if (ticketUpdate.modifiedCount === 0) {
         return res.status(400).json({ success: false, message: "Failed to accept. Insufficient ticket stock!" });
       }
     }
 
-    // খ) এবার বুকিং স্ট্যাটাস আপডেট করুন (Accept বা Reject যাই হোক না কেন)
+   
     const result = await bookingCollection.updateOne(
       { _id: new ObjectId(id) },
-      { $set: { status: action } } // status হবে 'accepted' অথবা 'rejected'
+      { $set: { status: action } } 
     );
 
     if (result.matchedCount === 0) {
@@ -327,9 +373,9 @@ app.patch('/vendor/my-added-tickets/:id',async(req,res)=>{
 
 
 //admin get api
-app.get('/admin/all-tickets', async (req, res) => {
+app.get('/admin/all-tickets', verifyToken, async (req, res) => {
   try {
-    const result = await vendorCollection.find().toArray(); // কালেকশনের সব ডেটা অ্যারে আকারে আসবে
+    const result = await vendorCollection.find().toArray(); 
     res.status(200).json(result);
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch tickets", error: error.message });
@@ -337,7 +383,20 @@ app.get('/admin/all-tickets', async (req, res) => {
 });
 
 
-// একদম মিনিমাম কোড (ঝুঁকি আছে, তবে কাজ করবে)
+app.get('/all-tickets',  async (req, res) => {
+  try {
+    const result = await vendorCollection.find().toArray(); 
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch tickets", error: error.message });
+  }
+});
+
+
+
+
+
+
 app.patch('/admin/tickets/status/:id', async (req, res) => {
   try {
     const result = await vendorCollection.updateOne(
@@ -351,24 +410,27 @@ app.patch('/admin/tickets/status/:id', async (req, res) => {
 });
 
 
+
+
+
 //advertisement api
 
-// অ্যাডমিন নির্দিষ্ট টিকিট Advertise বা Unadvertise করার জন্য
+
 app.patch('/admin/tickets/advertise/:id', async (req, res) => {
   const id = req.params.id;
-  const { isAdvertised } = req.body; // ফ্রন্টএন্ড থেকে true অথবা false আসবে
+  const { isAdvertised } = req.body; 
 
   if (!ObjectId.isValid(id)) {
     return res.status(400).json({ message: "Invalid ID format" });
   }
 
   try {
-    // ১. যদি ফ্রন্টএন্ড থেকে টিকিটটি Advertise (true) করতে বলা হয়
+   
     if (isAdvertised === true) {
-      // ডাটাবেজে অলরেডি কয়টি টিকিট advertised অবস্থায় আছে তা কাউন্ট করি
+      
       const advertisedCount = await vendorCollection.countDocuments({ isAdvertised: true });
       
-      // যদি অলরেডি ৬ বা তার বেশি থাকে, তবে নতুন করে করতে দেবো না
+      
       if (advertisedCount >= 6) {
         return res.status(400).json({ 
           success: false, 
@@ -377,7 +439,7 @@ app.patch('/admin/tickets/advertise/:id', async (req, res) => {
       }
     }
 
-    // ২. লিমিট ঠিক থাকলে বা Unadvertise (false) করতে চাইলে ডাটাবেজ আপডেট করি
+    
     const result = await vendorCollection.updateOne(
       { _id: new ObjectId(id) },
       { $set: { isAdvertised: isAdvertised } }
@@ -417,21 +479,21 @@ app.delete('/vendor/my-added-tickets/:id',async(req,res)=>{
 
 
 
-// 👥 অ্যাডমিন কর্তৃক ইউজারের রোল বা ফ্রড স্ট্যাটাস আপডেট করার এপিআই
+
 app.patch('/admin/users/role/:id', async (req, res) => {
   const id = req.params.id;
-  const { role, isFraud } = req.body; // ফ্রন্টএন্ড থেকে role অথবা isFraud পাঠানো হবে
+  const { role, isFraud } = req.body;
 
   if (!ObjectId.isValid(id)) {
     return res.status(400).json({ message: "Invalid ID format" });
   }
 
   try {
-    // ডাইনামিকালি অবজেক্ট তৈরি করছি যা আপডেট করা হবে
+  
     let updateFields = {};
     
-    if (role) updateFields.role = role; // 'admin' অথবা 'vendor' অথবা 'user'
-    if (isFraud !== undefined) updateFields.isFraud = isFraud; // true অথবা false
+    if (role) updateFields.role = role; 
+    if (isFraud !== undefined) updateFields.isFraud = isFraud;
 
     const result = await userCollection.updateOne(
       { _id: new ObjectId(id) },
@@ -451,7 +513,7 @@ app.patch('/admin/users/role/:id', async (req, res) => {
   }
 });
 
-// সব ইউজারদের ডাটা নিয়ে আসার এপিআই (ইউজার লিস্ট টেবিল দেখানোর জন্য)
+
 app.get('/admin/all-users', async (req, res) => {
   try {
     const result = await userCollection.find({}).toArray();
@@ -467,6 +529,8 @@ app.get('/admin/all-users', async (req, res) => {
 
 
     // Send a ping to confirm a successful connection
+
+    //deploy korar somoy eta comment out korbo
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
